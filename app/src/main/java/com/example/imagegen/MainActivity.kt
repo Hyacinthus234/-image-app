@@ -34,31 +34,27 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun setupUI() {
-        // 加载模型按钮
         binding.btnLoadModels.setOnClickListener {
             loadModels()
         }
         
-        // 保存设置按钮
         binding.btnSaveSettings.setOnClickListener {
             saveSettings()
         }
         
         // 质量选择器
-        val qualityOptions = arrayOf("低质量 (fast)", "中等质量", "高质量", "超高质量 (slow)")
+        val qualityOptions = arrayOf("低质量（快速）", "中等质量（推荐）", "高质量（精细）", "超高质量（最慢）")
         val qualityAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, qualityOptions)
         qualityAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         binding.spinnerQuality.adapter = qualityAdapter
         binding.spinnerQuality.setSelection(1) // 默认中等质量
         
-        // 生成按钮
         binding.btnGenerate.setOnClickListener {
             generateImage()
         }
     }
     
     private fun loadSavedSettings() {
-        // 加载保存的设置
         binding.etBaseUrl.setText(preferences.getBaseUrl())
         binding.etApiKey.setText(preferences.getApiKey())
     }
@@ -68,18 +64,23 @@ class MainActivity : AppCompatActivity() {
         val apiKey = binding.etApiKey.text.toString().trim()
         
         if (baseUrl.isEmpty()) {
-            Toast.makeText(this, "Base URL不能为空", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Base URL 不能为空", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        if (!isValidUrl(baseUrl)) {
+            Toast.makeText(this, "Base URL 必须以 http:// 或 https:// 开头", Toast.LENGTH_LONG).show()
             return
         }
         
         if (apiKey.isEmpty()) {
-            Toast.makeText(this, "API Key不能为空", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "API Key 不能为空", Toast.LENGTH_SHORT).show()
             return
         }
         
         preferences.saveBaseUrl(baseUrl)
         preferences.saveApiKey(apiKey)
-        Toast.makeText(this, "设置已保存", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "✅ 设置已保存", Toast.LENGTH_SHORT).show()
     }
     
     private fun loadModels() {
@@ -87,12 +88,17 @@ class MainActivity : AppCompatActivity() {
         val apiKey = binding.etApiKey.text.toString().trim()
         
         if (baseUrl.isEmpty()) {
-            Toast.makeText(this, "请输入Base URL", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "请先输入 Base URL", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        if (!isValidUrl(baseUrl)) {
+            Toast.makeText(this, "Base URL 格式错误，需要 http:// 或 https:// 开头", Toast.LENGTH_LONG).show()
             return
         }
         
         if (apiKey.isEmpty()) {
-            Toast.makeText(this, "请输入API Key", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "请先输入 API Key", Toast.LENGTH_SHORT).show()
             return
         }
         
@@ -104,18 +110,20 @@ class MainActivity : AppCompatActivity() {
         viewModel.models.observe(this) { models ->
             if (models.isNotEmpty()) {
                 setupModelSpinner(models)
-                Toast.makeText(this, "加载了 ${models.size} 个模型", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "✅ 成功加载 ${models.size} 个模型", Toast.LENGTH_SHORT).show()
             }
         }
         
         // 观察生成的图片
         viewModel.generatedImageUrl.observe(this) { imageUrl ->
-            binding.ivGeneratedImage.visibility = View.VISIBLE
-            Glide.with(this)
-                .load(imageUrl)
-                .placeholder(R.drawable.ic_launcher_foreground)
-                .error(R.drawable.ic_launcher_foreground)
-                .into(binding.ivGeneratedImage)
+            if (!imageUrl.isNullOrEmpty()) {
+                binding.cardResult.visibility = View.VISIBLE
+                Glide.with(this)
+                    .load(imageUrl)
+                    .placeholder(R.drawable.ic_launcher_foreground)
+                    .error(R.drawable.ic_launcher_foreground)
+                    .into(binding.ivGeneratedImage)
+            }
         }
         
         // 观察加载状态
@@ -128,7 +136,9 @@ class MainActivity : AppCompatActivity() {
         
         // 观察错误消息
         viewModel.errorMessage.observe(this) { message ->
-            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            if (!message.isNullOrEmpty()) {
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            }
         }
     }
     
@@ -140,7 +150,9 @@ class MainActivity : AppCompatActivity() {
         
         binding.spinnerModel.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                selectedModel = models[position]
+                if (position >= 0 && position < models.size) {
+                    selectedModel = models[position]
+                }
             }
             
             override fun onNothingSelected(parent: AdapterView<*>?) {
@@ -159,22 +171,27 @@ class MainActivity : AppCompatActivity() {
         val prompt = binding.etPrompt.text.toString().trim()
         
         if (baseUrl.isEmpty()) {
-            Toast.makeText(this, "请输入Base URL", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "请先输入 Base URL", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        if (!isValidUrl(baseUrl)) {
+            Toast.makeText(this, "Base URL 格式错误", Toast.LENGTH_LONG).show()
             return
         }
         
         if (apiKey.isEmpty()) {
-            Toast.makeText(this, "请输入API Key", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "请先输入 API Key", Toast.LENGTH_SHORT).show()
             return
         }
         
         if (prompt.isEmpty()) {
-            Toast.makeText(this, "请输入提示词", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "请输入图片描述（提示词）", Toast.LENGTH_SHORT).show()
             return
         }
         
         if (selectedModel == null) {
-            Toast.makeText(this, "请选择模型", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "请先点击「加载模型」选择模型", Toast.LENGTH_SHORT).show()
             return
         }
         
@@ -198,5 +215,10 @@ class MainActivity : AppCompatActivity() {
             width = width,
             height = height
         )
+    }
+    
+    private fun isValidUrl(url: String): Boolean {
+        return url.startsWith("http://", ignoreCase = true) ||
+                url.startsWith("https://", ignoreCase = true)
     }
 }

@@ -12,7 +12,7 @@ object RetrofitClient {
     private var currentBaseUrl: String = ""
     
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        level = HttpLoggingInterceptor.Level.BASIC
     }
     
     private val okHttpClient = OkHttpClient.Builder()
@@ -23,11 +23,18 @@ object RetrofitClient {
         .build()
     
     fun getApi(baseUrl: String): ImageGenApi {
+        val normalizedUrl = ensureTrailingSlash(baseUrl.trim())
+        
+        // 验证 URL 格式，避免创建 Retrofit 时崩溃
+        if (!normalizedUrl.startsWith("http://") && !normalizedUrl.startsWith("https://")) {
+            throw IllegalArgumentException("Base URL 必须以 http:// 或 https:// 开头")
+        }
+        
         // 如果Base URL变化了，重新创建Retrofit实例
-        if (retrofit == null || currentBaseUrl != baseUrl) {
-            currentBaseUrl = baseUrl
+        if (retrofit == null || currentBaseUrl != normalizedUrl) {
+            currentBaseUrl = normalizedUrl
             retrofit = Retrofit.Builder()
-                .baseUrl(ensureTrailingSlash(baseUrl))
+                .baseUrl(normalizedUrl)
                 .client(okHttpClient)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()

@@ -44,3 +44,7 @@ Thumbs.db
 
 # Local env
 .env
+
+# APK download directory
+*.zip
+APK-download/
