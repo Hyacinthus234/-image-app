@@ -1,0 +1,18 @@
+# 默认自动检测文本文件换行符
+* text=auto
+
+# Unix 脚本必须用 LF
+gradlew text eol=lf
+
+# Windows 脚本用 CRLF
+gradlew.bat text eol=crlf
+
+# 二进制文件
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.aab binary
+*.apk binary
