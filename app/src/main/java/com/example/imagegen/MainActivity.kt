@@ -1,6 +1,8 @@
 package com.example.imagegen
 
+import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.util.Base64
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
@@ -8,6 +10,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import com.bumptech.glide.Glide
+import com.example.imagegen.api.GeneratedImage
 import com.example.imagegen.api.Model
 import com.example.imagegen.databinding.ActivityMainBinding
 import com.example.imagegen.viewmodel.MainViewModel
@@ -110,20 +113,13 @@ class MainActivity : AppCompatActivity() {
         viewModel.models.observe(this) { models ->
             if (models.isNotEmpty()) {
                 setupModelSpinner(models)
-                Toast.makeText(this, "✅ 成功加载 ${models.size} 个模型", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "✅ 已加载 ${models.size} 个模型", Toast.LENGTH_SHORT).show()
             }
         }
         
         // 观察生成的图片
-        viewModel.generatedImageUrl.observe(this) { imageUrl ->
-            if (!imageUrl.isNullOrEmpty()) {
-                binding.cardResult.visibility = View.VISIBLE
-                Glide.with(this)
-                    .load(imageUrl)
-                    .placeholder(R.drawable.ic_launcher_foreground)
-                    .error(R.drawable.ic_launcher_foreground)
-                    .into(binding.ivGeneratedImage)
-            }
+        viewModel.generatedImage.observe(this) { image ->
+            displayImage(image)
         }
         
         // 观察加载状态
@@ -142,8 +138,34 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    private fun displayImage(image: GeneratedImage) {
+        binding.cardResult.visibility = View.VISIBLE
+        
+        if (image.url != null) {
+            // 加载 URL 图片
+            Glide.with(this)
+                .load(image.url)
+                .placeholder(R.drawable.ic_launcher_foreground)
+                .error(R.drawable.ic_launcher_foreground)
+                .into(binding.ivGeneratedImage)
+        } else if (image.base64 != null) {
+            // 解码 base64 图片
+            try {
+                val bytes = Base64.decode(image.base64, Base64.DEFAULT)
+                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (bitmap != null) {
+                    binding.ivGeneratedImage.setImageBitmap(bitmap)
+                } else {
+                    Toast.makeText(this, "图片解码失败", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this, "图片解码失败：${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
     private fun setupModelSpinner(models: List<Model>) {
-        val modelNames = models.map { it.name }
+        val modelNames = models.map { it.id }
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, modelNames)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         binding.spinnerModel.adapter = adapter
@@ -203,8 +225,8 @@ class MainActivity : AppCompatActivity() {
             else -> "medium"
         }
         
-        val width = binding.etWidth.text.toString().toIntOrNull() ?: 512
-        val height = binding.etHeight.text.toString().toIntOrNull() ?: 512
+        val width = binding.etWidth.text.toString().toIntOrNull() ?: 1024
+        val height = binding.etHeight.text.toString().toIntOrNull() ?: 1024
         
         viewModel.generateImage(
             baseUrl = baseUrl,

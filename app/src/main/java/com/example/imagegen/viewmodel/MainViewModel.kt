@@ -4,6 +4,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.imagegen.api.GeneratedImage
 import com.example.imagegen.api.Model
 import com.example.imagegen.repository.ImageGenRepository
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -16,8 +17,8 @@ class MainViewModel : ViewModel() {
     private val _models = MutableLiveData<List<Model>>()
     val models: LiveData<List<Model>> = _models
     
-    private val _generatedImageUrl = MutableLiveData<String>()
-    val generatedImageUrl: LiveData<String> = _generatedImageUrl
+    private val _generatedImage = MutableLiveData<GeneratedImage>()
+    val generatedImage: LiveData<GeneratedImage> = _generatedImage
     
     private val _isLoading = MutableLiveData<Boolean>()
     val isLoading: LiveData<Boolean> = _isLoading
@@ -65,8 +66,8 @@ class MainViewModel : ViewModel() {
             _isLoading.value = true
             try {
                 repository.generateImage(baseUrl, apiKey, modelId, prompt, quality, width, height).fold(
-                    onSuccess = { imageUrl ->
-                        _generatedImageUrl.value = imageUrl
+                    onSuccess = { image ->
+                        _generatedImage.value = image
                         _isLoading.value = false
                     },
                     onFailure = { error ->

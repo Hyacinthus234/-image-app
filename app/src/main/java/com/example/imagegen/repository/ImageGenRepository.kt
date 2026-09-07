@@ -1,6 +1,7 @@
 package com.example.imagegen.repository
 
 import com.example.imagegen.api.GenerateRequest
+import com.example.imagegen.api.GeneratedImage
 import com.example.imagegen.api.Model
 import com.example.imagegen.api.RetrofitClient
 import kotlinx.coroutines.Dispatchers
@@ -8,18 +9,34 @@ import kotlinx.coroutines.withContext
 
 class ImageGenRepository {
     
+    companion object {
+        // 内置常用模型（当 API 不支持模型列表接口时使用）
+        private val fallbackModels = listOf(
+            Model(id = "gpt-image-2", `object` = "model"),
+            Model(id = "gemini-3.1-flash-image", `object` = "model")
+        )
+    }
+    
     suspend fun getModels(baseUrl: String, apiKey: String): Result<List<Model>> {
         return withContext(Dispatchers.IO) {
             try {
                 val api = RetrofitClient.getApi(baseUrl)
                 val response = api.getModels("Bearer $apiKey")
                 if (response.isSuccessful && response.body() != null) {
-                    Result.success(response.body()!!.models)
+                    val models = response.body()!!.data
+                    if (models.isNotEmpty()) {
+                        Result.success(models)
+                    } else {
+                        // 空列表，使用内置模型
+                        Result.success(fallbackModels)
+                    }
                 } else {
-                    Result.failure(Exception("获取模型列表失败 (HTTP ${response.code()})"))
+                    // 接口不支持或失败，使用内置模型
+                    Result.success(fallbackModels)
                 }
             } catch (e: Throwable) {
-                Result.failure(Exception(friendlyError(e)))
+                // 任何错误都回退到内置模型，保证可用
+                Result.success(fallbackModels)
             }
         }
     }
@@ -32,48 +49,63 @@ class ImageGenRepository {
         quality: String,
         width: Int,
         height: Int
-    ): Result<String> {
+    ): Result<GeneratedImage> {
         return withContext(Dispatchers.IO) {
             try {
-                val steps = when (quality) {
-                    "low" -> 15
-                    "medium" -> 25
-                    "high" -> 35
-                    "ultra" -> 50
-                    else -> 25
+                // 映射质量参数
+                val qualityValue = when (quality) {
+                    "low" -> "low"
+                    "medium" -> "medium"
+                    "high" -> "high"
+                    "ultra" -> "high"
+                    else -> "medium"
                 }
                 
                 val request = GenerateRequest(
                     model = modelId,
                     prompt = prompt,
-                    quality = quality,
-                    width = width,
-                    height = height,
-                    steps = steps
+                    n = 1,
+                    size = "${width}x${height}",
+                    quality = qualityValue
                 )
                 
                 val api = RetrofitClient.getApi(baseUrl)
                 val response = api.generateImage("Bearer $apiKey", request)
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
+                    val item = body.data.firstOrNull()
                     when {
-                        body.success && body.imageUrl != null -> {
-                            Result.success(body.imageUrl)
+                        item?.b64_json != null -> {
+                            Result.success(GeneratedImage(base64 = item.b64_json))
                         }
-                        body.success && body.imageBase64 != null -> {
-                            // 如果返回 base64，需要转 data URI（暂未处理，先返回错误提示）
-                            Result.failure(Exception("API 返回了 base64 格式，暂不支持"))
+                        item?.url != null -> {
+                            Result.success(GeneratedImage(url = item.url))
                         }
                         else -> {
-                            Result.failure(Exception(body.message ?: "生成图片失败"))
+                            Result.failure(Exception("API 未返回图片数据"))
                         }
                     }
                 } else {
-                    Result.failure(Exception("生成图片失败 (HTTP ${response.code()})"))
+                    // 解析错误响应体中的错误信息
+                    val errorMsg = parseError(response.errorBody()?.string())
+                    Result.failure(Exception("生成失败 (HTTP ${response.code()})${if (errorMsg != null) "：$errorMsg" else ""}"))
                 }
             } catch (e: Throwable) {
                 Result.failure(Exception(friendlyError(e)))
             }
+        }
+    }
+    
+    private fun parseError(errorBody: String?): String? {
+        if (errorBody.isNullOrEmpty()) return null
+        return try {
+            // 尝试解析 OpenAI 格式错误 { error: { message: "..." } }
+            val json = org.json.JSONObject(errorBody)
+            val error = json.optJSONObject("error")
+            error?.optString("message")?.takeIf { it.isNotEmpty() }
+        } catch (e: Exception) {
+            // 解析失败，截取前 200 字符
+            errorBody.take(200)
         }
     }
     

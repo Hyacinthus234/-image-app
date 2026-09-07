@@ -14,7 +14,10 @@ class ApiPreferences(context: Context) {
         private const val PREFS_NAME = "image_gen_prefs"
         private const val KEY_BASE_URL = "base_url"
         private const val KEY_API_KEY = "api_key"
-        private const val DEFAULT_BASE_URL = "https://api.example.com/v1"
+        
+        // deepkey.top 默认配置（OpenAI 兼容）
+        private const val DEFAULT_BASE_URL = "https://deepkey.top/v1"
+        private const val DEFAULT_API_KEY = "sk-SgA6IHW1bCpB5ZUX7Al5IiXbTNnWeydUBfxzMEWAFCDaJhzY"
     }
     
     fun saveBaseUrl(baseUrl: String) {
@@ -30,7 +33,7 @@ class ApiPreferences(context: Context) {
     }
     
     fun getApiKey(): String {
-        return prefs.getString(KEY_API_KEY, "") ?: ""
+        return prefs.getString(KEY_API_KEY, DEFAULT_API_KEY) ?: DEFAULT_API_KEY
     }
     
     fun clearAll() {

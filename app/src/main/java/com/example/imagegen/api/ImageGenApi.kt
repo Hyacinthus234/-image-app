@@ -1,48 +1,62 @@
 package com.example.imagegen.api
 
-import okhttp3.ResponseBody
 import retrofit2.Response
-import retrofit2.http.*
+import retrofit2.http.Body
+import retrofit2.http.GET
+import retrofit2.http.Header
+import retrofit2.http.POST
 
 interface ImageGenApi {
     
-    // 获取模型列表
+    // 获取模型列表（OpenAI 兼容格式）
     @GET("models")
     suspend fun getModels(
-        @Header("Authorization") apiKey: String
+        @Header("Authorization") auth: String
     ): Response<ModelsResponse>
     
-    // 生成图片
-    @POST("generate")
+    // 生成图片（OpenAI 兼容格式）
+    @POST("images/generations")
     suspend fun generateImage(
-        @Header("Authorization") apiKey: String,
+        @Header("Authorization") auth: String,
         @Body request: GenerateRequest
-    ): Response<GenerateResponse>
+    ): Response<ImageResponse>
 }
 
-// 数据模型
+// OpenAI 模型列表响应
 data class ModelsResponse(
-    val models: List<Model>
+    val data: List<Model> = emptyList()
 )
 
 data class Model(
     val id: String,
-    val name: String,
-    val description: String?
+    val `object`: String? = null,
+    val created: Long? = null,
+    val owned_by: String? = null
 )
 
+// OpenAI 生图请求
 data class GenerateRequest(
     val model: String,
     val prompt: String,
-    val quality: String,  // "low", "medium", "high", "ultra"
-    val width: Int = 512,
-    val height: Int = 512,
-    val steps: Int = 20
+    val n: Int = 1,
+    val size: String = "1024x1024",
+    val quality: String? = null
 )
 
-data class GenerateResponse(
-    val success: Boolean,
-    val imageUrl: String?,
-    val imageBase64: String?,
-    val message: String?
+// OpenAI 生图响应
+data class ImageResponse(
+    val data: List<ImageData> = emptyList(),
+    val created: Long? = null
+)
+
+data class ImageData(
+    val b64_json: String? = null,
+    val url: String? = null,
+    val revised_prompt: String? = null
+)
+
+// 生图结果（url 或 base64 二选一）
+data class GeneratedImage(
+    val url: String? = null,
+    val base64: String? = null
 )
