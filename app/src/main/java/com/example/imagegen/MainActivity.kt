@@ -2,16 +2,13 @@ package com.example.imagegen
 
 import android.Manifest
 import android.app.Dialog
-import android.content.ContentValues
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.Drawable
-import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.provider.MediaStore
 import android.util.Base64
 import android.view.View
 import android.widget.AdapterView
@@ -28,15 +25,19 @@ import com.example.imagegen.api.GeneratedImage
 import com.example.imagegen.api.Model
 import com.example.imagegen.databinding.ActivityMainBinding
 import com.example.imagegen.databinding.DialogFullscreenImageBinding
+import com.example.imagegen.model.ApiConfig
+import com.example.imagegen.store.ConfigStore
+import com.example.imagegen.store.HistoryStore
+import com.example.imagegen.util.ImageSaver
 import com.example.imagegen.viewmodel.MainViewModel
-import java.io.File
-import java.io.FileOutputStream
 
 class MainActivity : AppCompatActivity() {
     
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: MainViewModel
     private lateinit var preferences: ApiPreferences
+    private lateinit var configStore: ConfigStore
+    private lateinit var historyStore: HistoryStore
     
     private var selectedModel: Model? = null
     private var currentBitmap: Bitmap? = null
@@ -52,10 +53,17 @@ class MainActivity : AppCompatActivity() {
         
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
         preferences = ApiPreferences(this)
+        configStore = ConfigStore(this)
+        historyStore = HistoryStore(this)
         
         setupUI()
         loadSavedSettings()
         observeViewModel()
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        refreshConfigSpinner()
     }
     
     private fun setupUI() {
@@ -87,6 +95,11 @@ class MainActivity : AppCompatActivity() {
         binding.ivGeneratedImage.setOnClickListener {
             showFullscreenImage()
         }
+        
+        // 历史记录
+        binding.btnHistory.setOnClickListener {
+            startActivity(Intent(this, HistoryActivity::class.java))
+        }
     }
     
     private fun loadSavedSettings() {
@@ -94,9 +107,38 @@ class MainActivity : AppCompatActivity() {
         binding.etApiKey.setText(preferences.getApiKey())
     }
     
+    private fun refreshConfigSpinner() {
+        val configs = configStore.getConfigs()
+        if (configs.isEmpty()) {
+            val emptyAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, arrayOf("（暂无保存的配置）"))
+            emptyAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            binding.spinnerConfig.adapter = emptyAdapter
+            return
+        }
+        
+        val names = configs.map { it.name }
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, names)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.spinnerConfig.adapter = adapter
+        
+        binding.spinnerConfig.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (position >= 0 && position < configs.size) {
+                    val config = configs[position]
+                    binding.etBaseUrl.setText(config.baseUrl)
+                    binding.etApiKey.setText(config.apiKey)
+                    binding.etConfigName.setText(config.name)
+                }
+            }
+            
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+    }
+    
     private fun saveSettings() {
         val baseUrl = binding.etBaseUrl.text.toString().trim()
         val apiKey = binding.etApiKey.text.toString().trim()
+        val configName = binding.etConfigName.text.toString().trim()
         
         if (baseUrl.isEmpty()) {
             Toast.makeText(this, "Base URL 不能为空", Toast.LENGTH_SHORT).show()
@@ -113,9 +155,20 @@ class MainActivity : AppCompatActivity() {
             return
         }
         
+        if (configName.isEmpty()) {
+            Toast.makeText(this, "请填写「配置名称」用于保存（如 deepkey）", Toast.LENGTH_LONG).show()
+            return
+        }
+        
+        // 保存到配置列表
+        configStore.saveConfig(ApiConfig(configName, baseUrl, apiKey))
+        
+        // 同时保存为当前使用的配置
         preferences.saveBaseUrl(baseUrl)
         preferences.saveApiKey(apiKey)
-        Toast.makeText(this, "✅ 设置已保存", Toast.LENGTH_SHORT).show()
+        
+        refreshConfigSpinner()
+        Toast.makeText(this, "✅ 配置「$configName」已保存", Toast.LENGTH_SHORT).show()
     }
     
     private fun loadModels() {
@@ -141,7 +194,6 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun observeViewModel() {
-        // 观察模型列表
         viewModel.models.observe(this) { models ->
             if (models.isNotEmpty()) {
                 setupModelSpinner(models)
@@ -149,12 +201,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
         
-        // 观察生成的图片
         viewModel.generatedImage.observe(this) { image ->
             displayImage(image)
         }
         
-        // 观察加载状态
         viewModel.isLoading.observe(this) { isLoading ->
             binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
             binding.btnGenerate.isEnabled = !isLoading
@@ -162,7 +212,6 @@ class MainActivity : AppCompatActivity() {
             binding.btnSaveSettings.isEnabled = !isLoading
         }
         
-        // 观察错误消息
         viewModel.errorMessage.observe(this) { message ->
             if (!message.isNullOrEmpty()) {
                 Toast.makeText(this, message, Toast.LENGTH_LONG).show()
@@ -174,7 +223,6 @@ class MainActivity : AppCompatActivity() {
         binding.cardResult.visibility = View.VISIBLE
         
         if (image.url != null) {
-            // 用 Glide 下载 Bitmap（同时用于显示和保存）
             Glide.with(this)
                 .asBitmap()
                 .load(image.url)
@@ -183,6 +231,7 @@ class MainActivity : AppCompatActivity() {
                     override fun onResourceReady(resource: Bitmap, transition: Transition<in Bitmap>?) {
                         currentBitmap = resource
                         binding.ivGeneratedImage.setImageBitmap(resource)
+                        saveToHistory(resource)
                     }
                     
                     override fun onLoadCleared(placeholder: Drawable?) {}
@@ -192,13 +241,13 @@ class MainActivity : AppCompatActivity() {
                     }
                 })
         } else if (image.base64 != null) {
-            // 解码 base64 图片
             try {
                 val bytes = Base64.decode(image.base64, Base64.DEFAULT)
                 val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 if (bitmap != null) {
                     currentBitmap = bitmap
                     binding.ivGeneratedImage.setImageBitmap(bitmap)
+                    saveToHistory(bitmap)
                 } else {
                     Toast.makeText(this, "图片解码失败", Toast.LENGTH_SHORT).show()
                 }
@@ -206,6 +255,19 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "图片解码失败：${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+    
+    private fun saveToHistory(bitmap: Bitmap) {
+        val prompt = binding.etPrompt.text.toString().trim()
+        val model = selectedModel?.id ?: "未知"
+        val quality = when (binding.spinnerQuality.selectedItemPosition) {
+            0 -> "低质量"
+            1 -> "中等质量"
+            2 -> "高质量"
+            3 -> "超高质量"
+            else -> "中等质量"
+        }
+        historyStore.saveHistory(bitmap, prompt, model, quality)
     }
     
     private fun setupModelSpinner(models: List<Model>) {
@@ -290,11 +352,14 @@ class MainActivity : AppCompatActivity() {
             return
         }
         
-        // Android 10+ 无需权限，Android 9- 需要权限
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         ) {
-            doSaveImage(bitmap)
+            if (ImageSaver.saveToGallery(this, bitmap)) {
+                Toast.makeText(this, "✅ 图片已保存到相册", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "❌ 保存失败", Toast.LENGTH_SHORT).show()
+            }
         } else {
             ActivityCompat.requestPermissions(
                 this,
@@ -308,60 +373,14 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_WRITE_PERMISSION) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                currentBitmap?.let { doSaveImage(it) }
+                currentBitmap?.let {
+                    if (ImageSaver.saveToGallery(this, it)) {
+                        Toast.makeText(this, "✅ 图片已保存到相册", Toast.LENGTH_SHORT).show()
+                    }
+                }
             } else {
                 Toast.makeText(this, "需要存储权限才能保存图片", Toast.LENGTH_SHORT).show()
             }
-        }
-    }
-    
-    private fun doSaveImage(bitmap: Bitmap) {
-        try {
-            val success = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                saveToMediaStore(bitmap)
-            } else {
-                saveToExternalStorage(bitmap)
-            }
-            
-            if (success) {
-                Toast.makeText(this, "✅ 图片已保存到相册", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "❌ 保存失败", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "❌ 保存失败：${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
-    
-    private fun saveToMediaStore(bitmap: Bitmap): Boolean {
-        val fileName = "AI_${System.currentTimeMillis()}.png"
-        val contentValues = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
-            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/AI图片生成器")
-        }
-        val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-            ?: return false
-        return contentResolver.openOutputStream(uri)?.use { stream ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-            true
-        } ?: false
-    }
-    
-    private fun saveToExternalStorage(bitmap: Bitmap): Boolean {
-        val dir = File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
-            "AI图片生成器"
-        )
-        if (!dir.exists()) {
-            dir.mkdirs()
-        }
-        val file = File(dir, "AI_${System.currentTimeMillis()}.png")
-        return FileOutputStream(file).use { stream ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-            // 通知相册刷新
-            MediaScannerConnection.scanFile(this, arrayOf(file.absolutePath), arrayOf("image/png"), null)
-            true
         }
     }
     
@@ -375,7 +394,6 @@ class MainActivity : AppCompatActivity() {
         val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
         val dialogBinding = DialogFullscreenImageBinding.inflate(layoutInflater)
         dialogBinding.ivFullscreen.setImageBitmap(bitmap)
-        // 点击任意位置关闭
         dialogBinding.root.setOnClickListener {
             dialog.dismiss()
         }
