@@ -213,7 +213,7 @@ class MainActivity : AppCompatActivity() {
         }
         
         if (apiKey.isEmpty()) {
-            Toast.makeText(this, "请先输入 API Key", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "请先在配置区填写你的 API Key", Toast.LENGTH_SHORT).show()
             return
         }
         
@@ -336,7 +336,7 @@ class MainActivity : AppCompatActivity() {
         }
         
         if (apiKey.isEmpty()) {
-            Toast.makeText(this, "请先输入 API Key", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "请先在配置区填写你的 API Key", Toast.LENGTH_SHORT).show()
             return
         }
         
