@@ -1,10 +1,14 @@
 package com.example.imagegen.api
 
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
+import retrofit2.http.Multipart
 import retrofit2.http.POST
+import retrofit2.http.Part
 
 interface ImageGenApi {
     
@@ -14,11 +18,25 @@ interface ImageGenApi {
         @Header("Authorization") auth: String
     ): Response<ModelsResponse>
     
-    // 生成图片（OpenAI 兼容格式）
+    // 生成图片（OpenAI 兼容格式，纯文生图）
     @POST("images/generations")
     suspend fun generateImage(
         @Header("Authorization") auth: String,
         @Body request: GenerateRequest
+    ): Response<ImageResponse>
+    
+    // 图生图 / 参考图编辑（OpenAI 兼容的 /images/edits，multipart 上传）
+    // 多张参考图复用同一个 "image[]" 字段名重复出现。
+    @Multipart
+    @POST("images/edits")
+    suspend fun editImage(
+        @Header("Authorization") auth: String,
+        @Part images: List<MultipartBody.Part>,
+        @Part("prompt") prompt: RequestBody,
+        @Part("model") model: RequestBody,
+        @Part("n") n: RequestBody,
+        @Part("size") size: RequestBody,
+        @Part("quality") quality: RequestBody
     ): Response<ImageResponse>
 }
 

@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Base64
@@ -14,10 +15,12 @@ import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
@@ -25,11 +28,16 @@ import com.example.imagegen.api.GeneratedImage
 import com.example.imagegen.api.Model
 import com.example.imagegen.databinding.ActivityMainBinding
 import com.example.imagegen.databinding.DialogFullscreenImageBinding
+import com.example.imagegen.databinding.ItemReferenceImageBinding
 import com.example.imagegen.model.ApiConfig
 import com.example.imagegen.store.ConfigStore
 import com.example.imagegen.store.HistoryStore
 import com.example.imagegen.util.ImageSaver
 import com.example.imagegen.viewmodel.MainViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 
 class MainActivity : AppCompatActivity() {
     
@@ -42,8 +50,22 @@ class MainActivity : AppCompatActivity() {
     private var selectedModel: Model? = null
     private var currentBitmap: Bitmap? = null
     
+    /** 参考图字节（上传用）与缩略图（显示用），两者下标一一对应。 */
+    private val referenceBytes = mutableListOf<ByteArray>()
+    private val referenceThumbs = mutableListOf<Bitmap>()
+    
+    /** 从相册一次选多张参考图。 */
+    private val pickReferenceImages = registerForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        if (uris.isNullOrEmpty()) return@registerForActivityResult
+        uris.forEach { addReferenceImage(it) }
+    }
+    
     companion object {
         private const val REQUEST_WRITE_PERMISSION = 100
+        /** 参考图上传前的最长边：过大的图既慢，也容易被服务端拒绝。 */
+        private const val MAX_REFERENCE_EDGE = 1536
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,6 +121,11 @@ class MainActivity : AppCompatActivity() {
         // 历史记录
         binding.btnHistory.setOnClickListener {
             startActivity(Intent(this, HistoryActivity::class.java))
+        }
+        
+        // 添加参考图（相册多选）
+        binding.btnAddReference.setOnClickListener {
+            pickReferenceImages.launch("image/*")
         }
     }
     
@@ -341,7 +368,8 @@ class MainActivity : AppCompatActivity() {
             prompt = prompt,
             quality = quality,
             width = width,
-            height = height
+            height = height,
+            referenceImages = referenceBytes.toList()
         )
     }
     
@@ -399,6 +427,92 @@ class MainActivity : AppCompatActivity() {
         }
         dialog.setContentView(dialogBinding.root)
         dialog.show()
+    }
+    
+    // ---------------- 参考图（垫图） ----------------
+    
+    /** 读取相册图片 → 压缩 → 入列并刷新缩略图。 */
+    private fun addReferenceImage(uri: Uri) {
+        lifecycleScope.launch {
+            val loaded = withContext(Dispatchers.IO) { loadReferenceImage(uri) }
+            if (loaded == null) {
+                Toast.makeText(this@MainActivity, "这张图读取失败，已跳过", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            referenceBytes.add(loaded.first)
+            referenceThumbs.add(loaded.second)
+            refreshReferenceImages()
+        }
+    }
+    
+    /** 解码 + 按最长边缩放 + 压成 JPEG。返回 (上传字节, 缩略图)。 */
+    private fun loadReferenceImage(uri: Uri): Pair<ByteArray, Bitmap>? {
+        return try {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, bounds)
+            }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            
+            val decodeOptions = BitmapFactory.Options().apply {
+                inSampleSize = calculateInSampleSize(bounds.outWidth, bounds.outHeight, MAX_REFERENCE_EDGE)
+            }
+            val decoded = contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, decodeOptions)
+            } ?: return null
+            
+            val scaled = scaleDown(decoded, MAX_REFERENCE_EDGE)
+            val bytes = ByteArrayOutputStream().use { out ->
+                scaled.compress(Bitmap.CompressFormat.JPEG, 88, out)
+                out.toByteArray()
+            }
+            bytes to scaled
+        } catch (e: Exception) {
+            null
+        }
+    }
+    
+    /** 按 2 的幂求采样率，先把解码尺寸压到接近目标值。 */
+    private fun calculateInSampleSize(width: Int, height: Int, maxEdge: Int): Int {
+        var sample = 1
+        var longest = maxOf(width, height)
+        while (longest / 2 >= maxEdge) {
+            longest /= 2
+            sample *= 2
+        }
+        return sample
+    }
+    
+    /** 解码后若仍超过 maxEdge，再做一次精确缩放。 */
+    private fun scaleDown(source: Bitmap, maxEdge: Int): Bitmap {
+        val longest = maxOf(source.width, source.height)
+        if (longest <= maxEdge) return source
+        val ratio = maxEdge.toFloat() / longest
+        return Bitmap.createScaledBitmap(
+            source,
+            (source.width * ratio).toInt().coerceAtLeast(1),
+            (source.height * ratio).toInt().coerceAtLeast(1),
+            true
+        )
+    }
+    
+    /** 重建参考图缩略图行与计数。 */
+    private fun refreshReferenceImages() {
+        binding.llReferences.removeAllViews()
+        referenceThumbs.forEachIndexed { index, bitmap ->
+            val item = ItemReferenceImageBinding.inflate(layoutInflater, binding.llReferences, false)
+            item.ivThumb.setImageBitmap(bitmap)
+            item.btnRemove.setOnClickListener {
+                if (index in referenceBytes.indices) {
+                    referenceBytes.removeAt(index)
+                    referenceThumbs.removeAt(index)
+                    refreshReferenceImages()
+                }
+            }
+            binding.llReferences.addView(item.root)
+        }
+        binding.svReferences.visibility = if (referenceThumbs.isEmpty()) View.GONE else View.VISIBLE
+        binding.tvReferenceCount.text = "${referenceThumbs.size} 张"
     }
     
     private fun isValidUrl(url: String): Boolean {

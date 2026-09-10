@@ -6,6 +6,9 @@ import com.example.imagegen.api.Model
 import com.example.imagegen.api.RetrofitClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class ImageGenRepository {
     
@@ -15,6 +18,9 @@ class ImageGenRepository {
             Model(id = "gpt-image-2", `object` = "model"),
             Model(id = "gemini-3.1-flash-image", `object` = "model")
         )
+        
+        /** multipart 里参考图的字段名（OpenAI /images/edits 的多图约定）。 */
+        private const val REFERENCE_FIELD = "image[]"
     }
     
     suspend fun getModels(baseUrl: String, apiKey: String): Result<List<Model>> {
@@ -41,6 +47,12 @@ class ImageGenRepository {
         }
     }
     
+    /**
+     * 生成图片。
+     *
+     * 没有参考图时走纯文生图（`POST images/generations`，JSON）；
+     * 带参考图时走图生图（`POST images/edits`，multipart 上传，支持多张）。
+     */
     suspend fun generateImage(
         baseUrl: String,
         apiKey: String,
@@ -48,7 +60,8 @@ class ImageGenRepository {
         prompt: String,
         quality: String,
         width: Int,
-        height: Int
+        height: Int,
+        referenceImages: List<ByteArray> = emptyList()
     ): Result<GeneratedImage> {
         return withContext(Dispatchers.IO) {
             try {
@@ -60,17 +73,35 @@ class ImageGenRepository {
                     "ultra" -> "high"
                     else -> "medium"
                 }
-                
-                val request = GenerateRequest(
-                    model = modelId,
-                    prompt = prompt,
-                    n = 1,
-                    size = "${width}x${height}",
-                    quality = qualityValue
-                )
+                val sizeValue = "${width}x${height}"
                 
                 val api = RetrofitClient.getApi(baseUrl)
-                val response = api.generateImage("Bearer $apiKey", request)
+                val auth = "Bearer $apiKey"
+                
+                val response = if (referenceImages.isEmpty()) {
+                    api.generateImage(
+                        auth,
+                        GenerateRequest(
+                            model = modelId,
+                            prompt = prompt,
+                            n = 1,
+                            size = sizeValue,
+                            quality = qualityValue
+                        )
+                    )
+                } else {
+                    val textType = "text/plain".toMediaType()
+                    api.editImage(
+                        auth = auth,
+                        images = buildReferenceParts(referenceImages),
+                        prompt = prompt.toRequestBody(textType),
+                        model = modelId.toRequestBody(textType),
+                        n = "1".toRequestBody(textType),
+                        size = sizeValue.toRequestBody(textType),
+                        quality = qualityValue.toRequestBody(textType)
+                    )
+                }
+                
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
                     val item = body.data.firstOrNull()
@@ -88,11 +119,29 @@ class ImageGenRepository {
                 } else {
                     // 解析错误响应体中的错误信息
                     val errorMsg = parseError(response.errorBody()?.string())
-                    Result.failure(Exception("生成失败 (HTTP ${response.code()})${if (errorMsg != null) "：$errorMsg" else ""}"))
+                    val endpoint = if (referenceImages.isEmpty()) "生成" else "参考图生成"
+                    Result.failure(
+                        Exception(
+                            "$endpoint 失败 (HTTP ${response.code()})" +
+                                if (errorMsg != null) "：$errorMsg" else ""
+                        )
+                    )
                 }
             } catch (e: Throwable) {
                 Result.failure(Exception(friendlyError(e)))
             }
+        }
+    }
+    
+    /** 把参考图字节数组打包成 multipart 的多个同名 part。 */
+    private fun buildReferenceParts(images: List<ByteArray>): List<MultipartBody.Part> {
+        val mediaType = "image/jpeg".toMediaType()
+        return images.mapIndexed { index, bytes ->
+            MultipartBody.Part.createFormData(
+                REFERENCE_FIELD,
+                "reference_${index + 1}.jpg",
+                bytes.toRequestBody(mediaType)
+            )
         }
     }
     

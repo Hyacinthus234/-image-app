@@ -60,12 +60,13 @@ class MainViewModel : ViewModel() {
         prompt: String,
         quality: String,
         width: Int,
-        height: Int
+        height: Int,
+        referenceImages: List<ByteArray> = emptyList()
     ) {
         viewModelScope.launch(exceptionHandler) {
             _isLoading.value = true
             try {
-                repository.generateImage(baseUrl, apiKey, modelId, prompt, quality, width, height).fold(
+                repository.generateImage(baseUrl, apiKey, modelId, prompt, quality, width, height, referenceImages).fold(
                     onSuccess = { image ->
                         _generatedImage.value = image
                         _isLoading.value = false
