@@ -1,11 +1,36 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
+    <!-- 应用主题：无 ActionBar，窗口背景走渐变，状态栏透明以贴合毛玻璃观感 -->
     <style name="Theme.ImageGen" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/purple_500</item>
+        <item name="colorPrimary">@color/accent</item>
         <item name="colorOnPrimary">@color/white</item>
+        <item name="colorPrimaryContainer">@color/accent_soft</item>
+        <item name="colorOnPrimaryContainer">@color/accent_dark</item>
         <item name="colorSecondary">@color/teal_700</item>
         <item name="colorOnSecondary">@color/white</item>
-        <item name="android:windowBackground">@color/background</item>
-        <item name="android:statusBarColor">@color/purple_700</item>
+        <item name="android:windowBackground">@drawable/bg_app_gradient</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+    </style>
+
+    <!-- 玻璃分组标题：小号、次级色、字重中等 -->
+    <style name="GlassSectionTitle">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/text_muted</item>
+        <item name="android:letterSpacing">0.02</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- 玻璃输入框：统一 14dp 圆角 -->
+    <style name="GlassInput" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxCornerRadiusTopStart">14dp</item>
+        <item name="boxCornerRadiusTopEnd">14dp</item>
+        <item name="boxCornerRadiusBottomStart">14dp</item>
+        <item name="boxCornerRadiusBottomEnd">14dp</item>
+        <item name="boxStrokeColor">@color/accent</item>
+        <item name="boxStrokeWidth">1dp</item>
+        <item name="boxBackgroundColor">#F2FFFFFF</item>
     </style>
 </resources>

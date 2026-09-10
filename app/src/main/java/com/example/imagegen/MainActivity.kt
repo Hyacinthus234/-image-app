@@ -127,11 +127,35 @@ class MainActivity : AppCompatActivity() {
         binding.btnAddReference.setOnClickListener {
             pickReferenceImages.launch("image/*")
         }
+        
+        // 连接配置区折叠/展开
+        binding.headerConfig.setOnClickListener {
+            setConfigExpanded(binding.configBody.visibility != View.VISIBLE)
+        }
+    }
+    
+    private fun setConfigExpanded(expanded: Boolean) {
+        binding.configBody.visibility = if (expanded) View.VISIBLE else View.GONE
+        binding.tvConfigArrow.text = if (expanded) "▾" else "▸"
+    }
+    
+    /** 折叠态下提示当前连的是哪个站、有没有填 key。 */
+    private fun refreshConfigSummary() {
+        val key = preferences.getApiKey()
+        val url = preferences.getBaseUrl()
+        binding.tvConfigSummary.text = if (key.isNullOrEmpty()) {
+            "需要填写 API Key"
+        } else {
+            runCatching { java.net.URI(url).host }.getOrNull() ?: "已配置"
+        }
     }
     
     private fun loadSavedSettings() {
         binding.etBaseUrl.setText(preferences.getBaseUrl())
         binding.etApiKey.setText(preferences.getApiKey())
+        refreshConfigSummary()
+        // 没有 key 说明是首次使用，直接把配置区摊开，省得用户找不到在哪填
+        setConfigExpanded(preferences.getApiKey().isNullOrEmpty())
     }
     
     private fun refreshConfigSpinner() {
@@ -195,6 +219,7 @@ class MainActivity : AppCompatActivity() {
         preferences.saveApiKey(apiKey)
         
         refreshConfigSpinner()
+        refreshConfigSummary()
         Toast.makeText(this, "✅ 配置「$configName」已保存", Toast.LENGTH_SHORT).show()
     }
     

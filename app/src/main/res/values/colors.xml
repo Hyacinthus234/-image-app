@@ -13,4 +13,24 @@
     <color name="text_secondary">#636E72</color>
     <color name="gradient_start">#6C5CE7</color>
     <color name="gradient_end">#00CEC9</color>
+
+    <!-- ===== iOS 风格毛玻璃配色 ===== -->
+    <!-- 背景渐变：淡蓝紫 → 淡粉，柔和不抢戏 -->
+    <color name="bg_gradient_start">#E8EDFF</color>
+    <color name="bg_gradient_mid">#F1ECFF</color>
+    <color name="bg_gradient_end">#FFF1F6</color>
+
+    <!-- 玻璃卡片：高透明度白 + 1dp 高光描边 -->
+    <color name="glass_card">#B8FFFFFF</color>
+    <color name="glass_card_strong">#D9FFFFFF</color>
+    <color name="glass_stroke">#80FFFFFF</color>
+    <color name="glass_divider">#1F000000</color>
+
+    <!-- 强调色（按钮 / 选中态） -->
+    <color name="accent">#5B6CFF</color>
+    <color name="accent_dark">#4453D6</color>
+    <color name="accent_soft">#E5E9FF</color>
+
+    <color name="text_muted">#8A8F9C</color>
+    <color name="danger">#FF5A5F</color>
 </resources>
