@@ -15,9 +15,9 @@ class ApiPreferences(context: Context) {
         private const val KEY_BASE_URL = "base_url"
         private const val KEY_API_KEY = "api_key"
         
-        // deepkey.top 默认配置（OpenAI 兼容）
-        private const val DEFAULT_BASE_URL = "https://deepkey.top/v1"
-        private const val DEFAULT_API_KEY = "sk-SgA6IHW1bCpB5ZUX7Al5IiXbTNnWeydUBfxzMEWAFCDaJhzY"
+        // jbbtoken 默认配置（OpenAI 兼容）
+        private const val DEFAULT_BASE_URL = "https://jbbtoken.pages.dev/v1"
+        private const val DEFAULT_API_KEY = "sk-X7DTdjqHjx2YjuI1Ecfi7ImSNtxTjnW3fYeUJbNnEq4zjxen"
     }
     
     fun saveBaseUrl(baseUrl: String) {
