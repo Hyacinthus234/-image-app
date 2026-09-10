@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  深色模式只覆盖颜色，不碰 drawable：
+  bg_app_gradient / card_glass / spinner_bg 都引用这些 @color，夜间会自动跟随。
+-->
+<resources>
+    <!-- 渐变底：深蓝紫 → 深紫，保持柔和，不用纯黑 -->
+    <color name="bg_gradient_start">#171827</color>
+    <color name="bg_gradient_mid">#1E1B30</color>
+    <color name="bg_gradient_end">#2A1D2B</color>
+
+    <!-- 玻璃卡片：低透明度白叠在深底上，描边稍亮一点做高光 -->
+    <color name="glass_card">#1FFFFFFF</color>
+    <color name="glass_card_strong">#33FFFFFF</color>
+    <color name="glass_stroke">#2EFFFFFF</color>
+    <color name="glass_divider">#1FFFFFFF</color>
+
+    <!-- 强调色提亮，深底上够跳 -->
+    <color name="accent">#8B98FF</color>
+    <color name="accent_dark">#6F7DF5</color>
+    <color name="accent_soft">#2B2F52</color>
+
+    <color name="text_primary">#F2F3F7</color>
+    <color name="text_secondary">#C3C7D1</color>
+    <color name="text_muted">#8A8F9C</color>
+</resources>

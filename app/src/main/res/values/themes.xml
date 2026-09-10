@@ -23,7 +23,7 @@
         <item name="android:textStyle">bold</item>
     </style>
 
-    <!-- 玻璃输入框：统一 14dp 圆角 -->
+    <!-- 玻璃输入框：统一 14dp 圆角；底色用颜色资源，深色模式会自动跟随 -->
     <style name="GlassInput" parent="Widget.Material3.TextInputLayout.OutlinedBox">
         <item name="boxCornerRadiusTopStart">14dp</item>
         <item name="boxCornerRadiusTopEnd">14dp</item>
@@ -31,6 +31,6 @@
         <item name="boxCornerRadiusBottomEnd">14dp</item>
         <item name="boxStrokeColor">@color/accent</item>
         <item name="boxStrokeWidth">1dp</item>
-        <item name="boxBackgroundColor">#F2FFFFFF</item>
+        <item name="boxBackgroundColor">@color/glass_card_strong</item>
     </style>
 </resources>
